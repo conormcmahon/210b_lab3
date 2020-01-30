@@ -1,0 +1,342 @@
+---
+title: "210B Lab 3"
+author: "Conor McMahon"
+date: "1/28/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align='center')
+
+library(tidyverse)
+library(kableExtra)
+library(scales)
+library(Metrics)
+```
+
+### **1) Snowfall**
+
+**Snowfall for a location is found to be normally distributed with mean 96 inches and standard deviation 32 inches.**
+
+```{r}
+ 
+mean_snow <- 96
+std_snow <- 32
+
+```
+
+The normal distribution means we can draw probabilities and quantiles from R's pnorm() normal probability and qnorm() normal quantile functions, respectively.
+
+&nbsp;
+
+#### **a) What is the probability that a given year will have more than 120 inches of snow?**
+
+```{r}
+
+# use upper tail to get values ABOVE 120
+p_1a <- pnorm(120, mean=mean_snow, sd=std_snow, lower.tail=F)
+
+```
+
+This results in a probability of **`r round(p_1a,3)`** for getting more than 120 in of snow. 
+
+&nbsp;
+ 
+#### **b) What is the probability that the snowfall will be between 90 and 100 inches?**
+
+Here the probability is the probability of it being less than 100 minus the probability of it being less than 90...
+
+```{r}
+
+less_than_100 <- pnorm(100, mean=mean_snow, sd=std_snow, lower.tail=T)
+less_than_90 <- pnorm(90, mean=mean_snow, sd=std_snow, lower.tail=T)
+
+p_1b <- less_than_100 - less_than_90
+
+```
+
+This results in a probability of **`r round(p_1b,3)`** for the case that the snowfall is between 90 and 100 in. 
+  
+&nbsp;
+
+#### **c) What level of snowfall will be exceeded only 10% of the time?**
+
+The 0.1 quantile can be found using the R function qnorm():
+
+```{r}
+
+p_1c <- qnorm(0.1, mean=mean_snow, sd=std_snow, lower.tail=F)
+
+```
+
+This means that **`r round(p_1c,3)`** in of snow will be exceeded only 10% of the time. 
+  
+&nbsp;
+&nbsp;
+
+
+
+### **2) Housing Prices**
+
+**Assume that the prices paid for housing within a neighborhood have a normal distribution, with mean $100,000, and standard deviation $35,000.**
+
+Again, we'll use the pnorm() and qnorm() functions in R.
+
+```{r}
+ 
+mean_price <- 100000
+std_price <- 35000
+
+```
+
+&nbsp;
+
+#### **a) What percentage of houses in the neighborhood have prices between $90,000 and $130,000?**
+
+```{r}
+
+less_than_130 <- pnorm(130000, mean=mean_price, sd=std_price, lower.tail=T)
+less_than_90 <- pnorm(90000, mean=mean_price, sd=std_price, lower.tail=T)
+
+p_2a <- less_than_130 - less_than_90
+
+```
+
+This means that the probabilty of a house being priced between \$90,000 and $130,000 is **`r round(p_2a,4)`**.
+
+&nbsp;
+ 
+#### **b) What price of housing is such that only 12% of all houses in the neighborhood have lower prices?**
+
+
+```{r}
+
+p_2b <- qnorm(.12, mean=mean_price, sd=std_price, lower.tail=T)
+
+```
+
+This means that 12% of all the houses in the neighborhood have a price lower than **$`r sprintf("%.5g",round(p_2b,5))`**.
+  
+&nbsp;
+&nbsp;
+
+
+
+
+### **3) Grocery Stores**
+
+**Residents in a community have a choice of six different grocery stores. The proportions of residents observed to patronize each are p(1) = 0.4, p(2) = 0.25, p(3) = 0.15, p(4) = 0.1, p(5) = 0.05, and p(6) = 0.05, where the stores are arranged in terms of increasing distance from the residential community. Fit an intervening opportunities model to these data by estimating the parameter L.**
+
+From the slides, we have:
+
+\[
+p(X = i) = \frac{(1-L)^{i-1}L}{\sum_{i=L}^{n}(1-L)^{i-1}L}
+\]
+
+```{r}
+
+# we have 6 stores
+n <- 6
+# here are our given probabilities for each
+p_act <- c(.4, .25, .15, .1, .05, .05)
+
+# lets estimate L as the inverse of the mean...
+store_df <- data.frame(Store = 1:n,
+                       P_Actual = p_act)
+mean_result <- sum(store_df$Store * store_df$P_Actual)
+L <- 1/mean_result
+
+```
+
+We found a mean distance of **`r mean_result`** and thus **L = `r L`**. 
+
+```{r}
+# Now we can check our actual results vs. expected ones from the newly fit model:
+
+int_opp_model <- function(L, n, i)
+{
+  sum <- sum((1-L)^(1:n-1))
+  p <- (1-L)^(i-1) * L / sum / L
+}
+
+store_df$P_Modeled <- rep(0,n)
+for(i in 1:n)
+{
+  store_df[i,]$P_Modeled <- round(int_opp_model(L,n,i),3)
+}
+store_df$Error <- (store_df$P_Modeled - store_df$P_Actual)
+store_df$Error_Pct <- percent(store_df$Error/store_df$P_Actual)
+rmse_init <- rmse(store_df$P_Modeled, store_df$P_Actual)
+
+
+kable(store_df) %>% kable_styling()
+
+ggplot(data = store_df) + 
+  geom_line(aes(x = 1:n, y = P_Modeled), 
+            col = "blue") + 
+  geom_line(aes(x = 1:n, y = P_Actual), 
+            col = "red") + 
+  theme_minimal() + 
+  ggtitle("Comparison of Initial Intervening Opportunity Model to Data") +
+  xlab("Store ID") + 
+  ylab("Probability of Use") + 
+  labs(caption = "Probability of use for individual grocery stores by a certain community. Store IDs are presented in increasing order of distance \nfrom the community. The red curve shows the actual probability, while the blue curve provides the estimate built on a \nIntervening Opportunity Model assuming the store usage follows a geometric distribution with L = 1/mean_val.")
+
+```
+
+The above worked OK, with results that are actually fairly close, but several values still diverge pretty meaningfully, with especially large percent error for the small probability values. The root mean square error (RMSE) across all predictions is **`r rmse_init`**.We'll try optimizing for the best L to minimize the total RMSE error across all probabilities. 
+  
+```{r}
+
+# Build a function to evaluate the RMSE error for a given L value...
+rmse_int_opp <- function(L)
+{
+  stores <- 1:n
+  opps <- int_opp_model(L,n,1:6)
+  rmse(opps,p_act)
+}
+
+optimized <- optimize(rmse_int_opp, c(L-(L*.5), L+(L*.5)))
+
+store_opt_df <- store_df
+store_opt_df$P_Modeled <- int_opp_model(optimized[[1]], n, 1:6)
+store_opt_df$Error <- (store_opt_df$P_Modeled - store_opt_df$P_Actual)
+store_opt_df$Error_Pct <- percent(store_opt_df$Error/store_opt_df$P_Actual)
+
+```
+
+Following an optimization, we find an L value of **`r optimized[[1]]`** which results in an RMSE across the predictions of **`r optimized[[2]]`**, down from the initial value of **`r rmse_init`**.
+
+```{r}
+
+
+kable(store_opt_df) %>% kable_styling()
+
+ggplot(data = store_opt_df) + 
+  geom_line(aes(x = 1:n, y = P_Modeled), 
+            col = "blue") + 
+  geom_line(aes(x = 1:n, y = P_Actual), 
+            col = "red") + 
+  theme_minimal() + 
+  ggtitle("Comparison of Initial Intervening Opportunity Model to Data") +
+  xlab("Store ID") + 
+  ylab("Probability of Use") + 
+  labs(caption = "Probability of use for individual grocery stores by a certain community. Store IDs are presented in increasing order of distance \nfrom the community. The red curve shows the actual probability, while the blue curve provides the estimate built on a \nIntervening Opportunity Model with L optimized to minimize the RMSE in probability estimate.")
+
+
+ggplot() + 
+  geom_line(data = store_opt_df,
+            aes(x = 1:n, y = abs(P_Modeled-P_Actual)), 
+            col = "blue") + 
+  geom_line(data = store_df,
+            aes(x = 1:n, y = abs(P_Modeled-P_Actual)), 
+            col = "purple") + 
+  theme_minimal() + 
+  ggtitle("Probabiltiy Estimate Residuals for Initial and Optimized Models") +
+  xlab("Store ID") + 
+  ylab("Absolute Value Error in Probability of Use") + 
+  labs(caption = "Plotted values are the difference between predicted and actual proportions given the Intervening Probability Model. Optimized \nmodel shown in blue; original geometric distribution-based model shown in purple.")
+
+```
+
+Something interesting to note is that while the new model minimized the overall error, the individual error values at the last two stores are still pretty high. This is in part because it is impossible to fit an intervening opportunity model perfectly to a dataset where subsequent opportunites have the exact same usage, as is the case here. 
+
+  
+  
+&nbsp;
+&nbsp;
+
+
+
+
+### **3) Urban Migration**
+
+**The annual probability that suburban residents move to the central city is 0.08, while the annual probability that the city residents move to the suburbs is 0.11. Starting with respective populations of 30,000 and 20,000 in the central city and suburbs, respectively, forecast the population redistribution that will occur over the next three years. Use the Markov model assumption that the probabilities of movement will remain constant. Also find the long-run, equilibrium populations.**
+
+```{r}
+
+# Annual migration rates as fraction of source population
+p_cit <- 0.08
+p_sub <- 0.11
+
+# Number of Trials
+n = 100
+# City Population
+cit_pop <- rep(0,n)
+cit_pop[[1]] <- 30000
+# Suburban Population
+sub_pop <- rep(0,4)
+sub_pop[[1]] <- 20000
+for(i in 2:n)
+{
+  cit_pop[[i]] <- cit_pop[[i-1]]*(1-p_sub) + sub_pop[[i-1]]*p_cit
+  sub_pop[[i]] <- sub_pop[[i-1]]*(1-p_cit) + cit_pop[[i-1]]*p_sub
+}
+
+migration_df <- data.frame(city <- cit_pop,
+                           suburbs <- sub_pop)
+ggplot(migration_df) +
+  geom_line(aes(x = 1:n, city),
+            col = "red") +
+  geom_line(aes(x = 1:n, suburbs),
+            col = "blue") +
+  theme_minimal() + 
+  ggtitle("City and Suburb Migration Patterns") + 
+  labs(caption = "Migration between the city and adjacent suburbs over time, assuming a simple Markov model. City population is in \nred; suburban population is in blue.") +
+  xlab("Year since Beginning") + 
+  ylab("Population") + 
+  scale_y_continuous(limits = c(0,30000), expand = c(0,0))
+
+```
+
+At the end of three years, the city population will be **`r sprintf("%.5g",round(cit_pop[[4]]))`** while the suburban population will be **`r sprintf("%.5g",round(sub_pop[[4]]))`**. In contrast, by the time equilibrium is reached (modeled here with 100 years, beyond which it is clear from the graph that equilibrium has been more or less reached), the respective values will be **`r sprintf("%.5g",round(cit_pop[[100]]))`** and **`r sprintf("%.5g",round(sub_pop[[100]]))`**. At this point the initial populations of the two regions will have nearly reversed!
+
+  
+&nbsp;
+&nbsp;
+
+
+
+### 5) Earthquakes
+
+**The magnitude (Richter scale) of earthquakes along a Californian fault is exponentially distributed, with $\lambda= (1/2.35)$. What is the probability of an earthquake exceeding magnitude 6.3? There is one earthquake per year (on average) along the fault with magnitude greater than 6.1. Given this, what is the probability of an earthquake during the year that exceeds magnitude 7.7?**
+
+The CDF for the exponential function is given by 
+
+\[
+  CDF(x) = 1 - e^{-\lambda x}
+\]
+
+where x is earthquake magnitude and lambda is a probability decay constant (1/2.35). 
+
+```{r}
+
+above_6p3 <- 1 - (1 - exp(-(1/2.35)*6.3))
+
+```
+
+Consequently, the probability that a given earthquake will exceed 6.3 on the Richter scale is **`r above_6p3`**. To figure out the probability that an earthquake of magnitude X will occur on a given year, we can backtrack from the probability that a smaller earthquake will occur in the same time:
+
+\[
+  P(X=6.1) = 1 = A \lambda e^{-\lambda x} = A\lambda e^{-6.1\lambda}) 
+\]
+
+Given the overall number of earthquakes in an average year, A. From here:
+
+\[
+  A = (e^{-6.1\lambda})^{-1} \\
+  at\_least(X) = \frac{e^{-\lambda x}}{ e^{-6.1\lambda}}
+\]
+
+```{r}
+
+above_7p7 <- (exp(-(1/2.35)*7.7))/(exp(-(1/2.35)*6.1))
+
+```
+
+Therefore, the probability of an earthquake above 7.7 on the Richter scale occurring in a given year is **`r above_7p7`**.
+
+&nbsp;
+&nbsp;
+
+
